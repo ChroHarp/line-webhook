@@ -1,6 +1,5 @@
 // api/webhook.js
 
-// 若您希望使用 ES Modules 方式，Vercel 支持 export default
 export default async function handler(req, res) {
   // 僅允許 POST 請求
   if (req.method !== 'POST') {
@@ -8,10 +7,10 @@ export default async function handler(req, res) {
   }
   
   try {
-    // Vercel 會自動解析 JSON，如果 header 裡 Content-Type 設定為 application/json
+    // 解析 LINE Webhook 傳入的 JSON 請求 (Vercel 自動解析)
     const jsonData = req.body;
     
-    // 取得 events 陣列 (LINE Webhook 的 payload 結構)
+    // 取得 events 陣列
     const events = jsonData.events;
     if (!events || events.length === 0) {
       return res.status(200).json({ message: 'No events' });
@@ -19,14 +18,27 @@ export default async function handler(req, res) {
     
     // 處理每一個事件
     for (const event of events) {
+      // 根據 source.type 決定該用哪個 id
+      let sourceId = "";
+      const source = event.source;
+      
+      if (source && source.type) {
+        if (source.type === "group" && source.groupId) {
+          sourceId = source.groupId;  // 群組對話的 ID
+        } else if (source.type === "room" && source.roomId) {
+          sourceId = source.roomId;   // 多人聊天室對話的 ID
+        } else if (source.userId) {
+          sourceId = source.userId;   // 個人對話的 ID
+        }
+      }
+      
       const replyToken = event.replyToken;
-      const userId = (event.source && event.source.userId) || null;
       const message = (event.message && event.message.text) || '';
       
-      console.log(`UserID: ${userId}, Message: ${message}`);
+      console.log(`SourceID: ${sourceId}, Message: ${message}`);
       
-      // 呼叫回覆函式
-      await replyToLine(replyToken, `您說了: ${message}`);
+      // 回覆用戶訊息 (這裡仍以 Reply 方式回覆)
+      await replyToLine(replyToken, `您說了: ${message}\n(識別碼：${sourceId})`);
     }
     
     return res.status(200).json({ status: 'success' });
@@ -36,9 +48,8 @@ export default async function handler(req, res) {
   }
 }
 
-// 回覆訊息給 LINE 使用 Messaging API 的 Reply 端點
+// 回覆訊息給 LINE 的函式 (使用 Messaging API Reply 端點)
 async function replyToLine(replyToken, text) {
-  // 請替換為您在 LINE Developers 後台取得的 Channel Access Token
   const CHANNEL_ACCESS_TOKEN = 'YOUR_LINE_CHANNEL_ACCESS_TOKEN';
   
   const url = 'https://api.line.me/v2/bot/message/reply';
